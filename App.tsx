@@ -8,7 +8,7 @@ import { initDB } from './src/content/db';
 
 
 const Stack = createNativeStackNavigator();
-export const serverURL = 'http://localhost:3000'
+export const serverURL = 'http://10.0.2.2:3000';
 export default function App() {
   useEffect(() => {
     initDB(); // دلوقتي هي async وتشتغل تمام
