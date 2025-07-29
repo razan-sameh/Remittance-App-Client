@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import NetInfo from '@react-native-community/netinfo';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { serverURL } from '../../App';
 import { enmTransactionStatus } from '../content/enum';
 import { verifyBiometric } from '../content/biometric';
