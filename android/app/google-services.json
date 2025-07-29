@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "917962898437",
+    "project_id": "remittance-app-3ec4a",
+    "storage_bucket": "remittance-app-3ec4a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:917962898437:android:c2705413e3ad8c4f1af06c",
+        "android_client_info": {
+          "package_name": "com.remittanceapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAl-wgnNEAZD27cYC04Afx83LrDMYkI8w0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -9,3 +9,11 @@ export type typTransaction = {
     fcmToken: string,
     createdAt: string
 }
+
+export type typKYC = {
+    fullName: string;
+    address: string;
+    phone: string;
+    nationalId: any;
+    selfiePhoto: any;
+}

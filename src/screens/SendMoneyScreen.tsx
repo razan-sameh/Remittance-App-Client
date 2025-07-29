@@ -1,92 +1,237 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, Button, Alert } from 'react-native';
-import * as Keychain from 'react-native-keychain';
-import { insertTransaction } from '../content/db';
-import NetInfo from "@react-native-community/netinfo";
+import React, { useState, useEffect } from 'react';
+import {
+    View,
+    Text,
+    TextInput,
+    StyleSheet,
+    Alert,
+    TouchableOpacity,
+    ScrollView,
+} from 'react-native';
+import { useForm, Controller } from 'react-hook-form';
+import NetInfo from '@react-native-community/netinfo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { serverURL } from '../../App';
+import { enmTransactionStatus } from '../content/enum';
+import { verifyBiometric } from '../content/biometric';
+import { typKYC } from '../content/type';
+import { insertTransaction } from '../content/db';
+import { getToken, getMessaging } from '@react-native-firebase/messaging';
+
+type FormData = {
+    amount: string;
+    recipient: string;
+};
+
+const SendMoneyScreen = () => {
+    const { control, handleSubmit, reset } = useForm<FormData>();
+    const [loading, setLoading] = useState(false);
+    const [sender, setSender] = useState<typKYC>();
+
+    useEffect(() => {
+        const loadKycData = async () => {
+            const storedData = await AsyncStorage.getItem('kycData');
+            if (storedData) {
+                const parsed = JSON.parse(storedData);
+                setSender(parsed);
+            }
+        };
+        loadKycData();
+    }, []);
 
 
-export default function SendMoneyScreen() {
-    const [recipient, setRecipient] = useState('');
-    const [amount, setAmount] = useState('');
-    const sender = 'user@example.com'; // ثابت مؤقتًا
-
-    const authenticateBiometric = async () => {
-        try {
-            const credentials = await Keychain.getGenericPassword({
-                authenticationPrompt: {
-                    title: 'Biometric Authentication',
-                    subtitle: 'Confirm transaction',
-                },
-            });
-
-            return !!credentials;
-        } catch (error) {
-            return false;
-        }
+    // Simulate a Cybrid API rate fetch
+    const getMockRate = async (): Promise<number> => {
+        // Simulate delay and return fixed exchange rate (e.g., USD → SLL = 20)
+        return new Promise((resolve) => {
+            setTimeout(() => resolve(20.0), 500); // 500ms delay
+        });
     };
 
-    const handleSend = async () => {
-        const isAuthenticated = await authenticateBiometric();
-        if (!isAuthenticated) {
-            Alert.alert('Authentication Failed');
+    const onSubmit = async (data: FormData) => {
+        setLoading(true);
+
+        const verified = await verifyBiometric();
+        if (!verified) {
+            setLoading(false);
+            Alert.alert('Authentication Failed', 'Biometric authentication is required to send money.');
             return;
         }
 
+        const rate = await getMockRate();
+
         const txData = {
-            sender,
-            receiver: recipient,
-            amount: parseFloat(amount),
-            status: 'Created',
+            sender: sender?.phone || '',
+            receiver: data.recipient,
+            amount: parseFloat(data.amount),
+            status: enmTransactionStatus.Created,
             createdAt: new Date().toISOString(),
+            synced: 0,
         };
 
         try {
             const net = await NetInfo.fetch();
-            if (net.isConnected) {
-                // Try send to backend
+            const isConnected = net.isConnected;
+
+            if (isConnected) {
+                const messaging = getMessaging();
+                const fcmToken = await getToken(messaging);
+
                 const res = await fetch(`${serverURL}/api/transactions`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...txData, fcmToken: 'mock-token' }),
+                    body: JSON.stringify({ ...txData, fcmToken }),
                 });
 
-                if (!res.ok) throw new Error('Failed to send to server');
-                Alert.alert('Transaction sent to server');
+                if (!res.ok) throw new Error('Server error');
+
+                // ✅ Store as synced & completed locally (optional)
+                await insertTransaction({
+                    ...txData,
+                    status: enmTransactionStatus.Completed,
+                    synced: 1,
+                });
+
+                Alert.alert('Success', 'Transaction sent successfully.');
             } else {
-                // Save offline
-                await insertTransaction(txData);
-                Alert.alert('Offline', 'Transaction saved locally');
+                // ⛔ Offline — store as unsynced
+                await insertTransaction({
+                    ...txData,
+                    synced: 0,
+                });
+
+                Alert.alert('Offline', 'Transaction saved locally.');
             }
         } catch (err) {
-            // Network error or server down
-            await insertTransaction(txData);
-            Alert.alert('Offline fallback', 'Saved locally due to error');
+            console.error(err);
+
+            await insertTransaction({
+                ...txData,
+                synced: 0,
+            });
+
+            Alert.alert('Error', 'Transaction saved locally due to a network/server issue.');
         }
 
-        // Reset form
-        setRecipient('');
-        setAmount('');
+        setLoading(false);
+        reset();
     };
 
+
+
     return (
-        <View style={{ padding: 20 }}>
-            <Text>Recipient Phone</Text>
-            <TextInput
-                value={recipient}
-                onChangeText={setRecipient}
-                style={{ borderWidth: 1, marginBottom: 10 }}
+        <ScrollView contentContainerStyle={styles.container}>
+
+            <Text style={styles.label}>Recipient Phone</Text>
+            <Controller
+                control={control}
+                name="recipient"
+                rules={{
+                    required: 'Recipient phone is required',
+                    pattern: {
+                        value: /^\+?[1-9]\d{1,14}$/,
+                        message: 'Invalid international phone number',
+                    },
+                }}
+                render={({ field: { onChange, value }, fieldState: { error } }) => (
+                    <>
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="phone-pad"
+                            value={value}
+                            onChangeText={onChange}
+                            placeholder="+201234567890"
+                        />
+                        {error && <Text style={styles.error}>{error.message}</Text>}
+                    </>
+                )}
             />
 
-            <Text>Amount</Text>
-            <TextInput
-                value={amount}
-                onChangeText={setAmount}
-                keyboardType="numeric"
-                style={{ borderWidth: 1, marginBottom: 10 }}
+            <Text style={styles.label}>Amount</Text>
+            <Controller
+                control={control}
+                name="amount"
+                rules={{
+                    required: 'Amount is required',
+                    pattern: {
+                        value: /^\d+(\.\d{1,2})?$/,
+                        message: 'Enter a valid amount',
+                    },
+                }}
+                render={({ field: { onChange, value }, fieldState: { error } }) => (
+                    <>
+                        <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={value}
+                            onChangeText={onChange}
+                            placeholder="Enter amount"
+                        />
+                        {error && <Text style={styles.error}>{error.message}</Text>}
+                    </>
+                )}
             />
 
-            <Button title="Send Money" onPress={handleSend} />
-        </View>
+            <TouchableOpacity
+                style={[styles.button, loading && styles.disabledButton]}
+                onPress={handleSubmit(onSubmit)}
+                disabled={loading}
+            >
+                <Text style={styles.buttonText}>
+                    {loading ? 'Sending...' : 'Send Money'}
+                </Text>
+            </TouchableOpacity>
+        </ScrollView>
     );
-}
+};
+
+export default SendMoneyScreen;
+
+const styles = StyleSheet.create({
+    container: {
+        flexGrow: 1,
+        backgroundColor: '#fff',
+        padding: 20,
+    },
+    title: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: '#8fbc8f',
+        textAlign: 'center',
+        marginBottom: 24,
+    },
+    label: {
+        fontWeight: 'bold',
+        marginTop: 12,
+        fontSize: 16,
+        color: '#333',
+    },
+    input: {
+        backgroundColor: '#f9f9f9',
+        borderWidth: 1,
+        borderColor: '#ddd',
+        padding: 12,
+        borderRadius: 10,
+        marginTop: 8,
+    },
+    error: {
+        color: 'red',
+        fontSize: 12,
+        marginTop: 4,
+    },
+    button: {
+        backgroundColor: '#8fbc8f',
+        padding: 16,
+        borderRadius: 12,
+        marginTop: 24,
+        alignItems: 'center',
+    },
+    disabledButton: {
+        opacity: 0.7,
+    },
+    buttonText: {
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: 16,
+    },
+});
