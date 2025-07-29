@@ -13,9 +13,10 @@ import { useForm, Controller } from 'react-hook-form';
 import { launchCamera } from 'react-native-image-picker';
 import axios from 'axios';
 import { serverURL } from '../../App';
-import { requestCameraPermission } from '../content/utils';
-import { setKycData } from '../content/asyncStorage';
+import { requestCameraPermission, toBase64 } from '../content/utils';
 import NetInfo from '@react-native-community/netinfo';
+import { saveEncryptedKyc } from '../content/secureStorage';
+import { typAttachment } from '../content/type';
 
 type KycFormData = {
     fullName: string;
@@ -30,20 +31,34 @@ export default function KycScreen({ navigation }: any) {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const capturePhoto = async (type: 'id' | 'selfie') => {
-        const permissionGranted = await requestCameraPermission(); // wait fully for this to complete
-
-        if (!permissionGranted) {
-            // No alert here! Let `requestCameraPermission` handle the alert itself
-            return;
-        }
+        const permissionGranted = await requestCameraPermission();
+        if (!permissionGranted) return;
 
         const result = await launchCamera({
             mediaType: 'photo',
             cameraType: type === 'selfie' ? 'front' : 'back',
+            quality: 0.8,
         });
 
         if (result.assets?.length) {
-            type === 'id' ? setnationalId(result.assets[0]) : setSelfiePhoto(result.assets[0]);
+            const image = result.assets[0];
+
+            if (!image.uri) return; // safeguard
+
+            const base64 = await toBase64(image.uri);
+
+            const photoData = {
+                uri: image.uri,
+                base64,
+                type: image.type || 'image/jpeg',
+                fileName: image.fileName || `${type}.jpg`,
+            };
+
+            if (type === 'id') {
+                setnationalId(photoData);
+            } else {
+                setSelfiePhoto(photoData);
+            }
         }
     };
 
@@ -59,7 +74,8 @@ export default function KycScreen({ navigation }: any) {
             Alert.alert("No Internet", "Please connect to the internet to submit your KYC data.");
             return;
         }
-        setIsSubmitting(true); // 🔄 Start loading
+
+        setIsSubmitting(true);
 
         const formData = new FormData();
         formData.append('fullName', data.fullName);
@@ -67,14 +83,14 @@ export default function KycScreen({ navigation }: any) {
         formData.append('phone', data.phone);
         formData.append('nationalId', {
             uri: nationalId.uri,
-            name: nationalId.fileName || 'id.jpg',
-            type: nationalId.type || 'image/jpeg',
-        });
+            name: nationalId.fileName,
+            type: nationalId.type,
+        } as typAttachment);
         formData.append('selfiePhoto', {
             uri: selfiePhoto.uri,
-            name: selfiePhoto.fileName || 'selfie.jpg',
-            type: selfiePhoto.type || 'image/jpeg',
-        });
+            name: selfiePhoto.fileName,
+            type: selfiePhoto.type,
+        } as typAttachment);
 
         try {
             await axios.post(`${serverURL}/api/kyc/submit`, formData, {
@@ -82,13 +98,14 @@ export default function KycScreen({ navigation }: any) {
                     'Content-Type': 'multipart/form-data',
                 },
             });
-            await setKycData({
+
+            // Save locally
+            await saveEncryptedKyc({
                 fullName: data.fullName,
                 address: data.address,
                 phone: data.phone,
-                nationalId,
-                selfiePhoto,
             });
+
             Alert.alert("Submitted", "Your KYC data is pending review", [
                 { text: "OK", onPress: () => navigation.replace("VerificationSuccess") }
             ]);
@@ -96,10 +113,9 @@ export default function KycScreen({ navigation }: any) {
             console.error(err);
             Alert.alert("Error", "Failed to submit KYC data");
         } finally {
-            setIsSubmitting(false); // ✅ Stop loading
+            setIsSubmitting(false);
         }
     };
-
 
     return (
         <ScrollView contentContainerStyle={styles.container}>

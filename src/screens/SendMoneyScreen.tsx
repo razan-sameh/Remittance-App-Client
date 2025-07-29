@@ -17,6 +17,7 @@ import { verifyBiometric } from '../content/biometric';
 import { typKYC } from '../content/type';
 import { insertTransaction } from '../content/db';
 import { getToken, getMessaging } from '@react-native-firebase/messaging';
+import { loadEncryptedKyc } from '../content/secureStorage';
 
 type FormData = {
     amount: string;
@@ -30,10 +31,9 @@ const SendMoneyScreen = () => {
 
     useEffect(() => {
         const loadKycData = async () => {
-            const storedData = await AsyncStorage.getItem('kycData');
+            const storedData = await loadEncryptedKyc();
             if (storedData) {
-                const parsed = JSON.parse(storedData);
-                setSender(parsed);
+                setSender(storedData); // sets fullName, phone, etc.
             }
         };
         loadKycData();
@@ -58,7 +58,7 @@ const SendMoneyScreen = () => {
             return;
         }
 
-        const rate = await getMockRate();
+        await getMockRate();
 
         const txData = {
             sender: sender?.phone || '',
@@ -85,14 +85,14 @@ const SendMoneyScreen = () => {
 
                 if (!res.ok) throw new Error('Server error');
 
+                
+                Alert.alert('Success', 'Transaction sent successfully.');
                 // ✅ Store as synced & completed locally (optional)
                 await insertTransaction({
                     ...txData,
                     status: enmTransactionStatus.Completed,
                     synced: 1,
                 });
-
-                Alert.alert('Success', 'Transaction sent successfully.');
             } else {
                 // ⛔ Offline — store as unsynced
                 await insertTransaction({

@@ -10,10 +10,16 @@ export type typTransaction = {
     createdAt: string
 }
 
+export type typAttachment = {
+    uri: string,
+    name: string,
+    type: string
+}
+
 export type typKYC = {
     fullName: string;
     address: string;
     phone: string;
-    nationalId: any;
-    selfiePhoto: any;
+    nationalId: typAttachment;
+    selfiePhoto: typAttachment;
 }

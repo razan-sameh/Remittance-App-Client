@@ -1,4 +1,10 @@
 import { PermissionsAndroid, Platform, Alert, Linking } from 'react-native';
+import RNFS from 'react-native-fs';
+
+export const toBase64 = async (uri: string) => {
+    const path = Platform.OS === 'android' ? uri : uri.replace('file://', '');
+    return await RNFS.readFile(path, 'base64');
+};
 
 export const requestCameraPermission = async (): Promise<boolean> => {
     if (Platform.OS === 'android') {

@@ -8,8 +8,6 @@ import { Alert, View, Text, StyleSheet } from 'react-native';
 import JailMonkey from 'jail-monkey';
 
 import { initDB } from '../content/db';
-import { getKycData } from '../content/asyncStorage';
-import { setKycData } from '../redux/slices/kycSlice';
 
 import KycScreen from '../screens/KycScreen';
 import VerificationSuccessScreen from '../screens/VerificationSuccessScreen';
@@ -19,6 +17,8 @@ import { NotificationProvider } from '../provider/NotificationProvider';
 import { SyncProvider } from '../provider/SyncProvider';
 import SplashScreen from '../screens/SplashScreen';
 import MainTabs from './MainTabs';
+import { loadEncryptedKyc } from '../content/secureStorage';
+import { setKycData } from '../redux/slices/kycSlice';
 
 const Stack = createNativeStackNavigator();
 
@@ -51,7 +51,7 @@ export default function AppNavigator() {
             }
 
             await initDB();
-            const kyc = await getKycData();
+            const kyc = await loadEncryptedKyc();
 
             if (kyc) {
                 dispatch(setKycData(kyc));

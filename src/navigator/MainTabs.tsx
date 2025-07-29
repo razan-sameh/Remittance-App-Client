@@ -24,7 +24,6 @@ export default function MainTabs() {
                     return <Ionicons name={iconName!} size={size} color={color} />;
                 },
                 tabBarActiveTintColor: '#8fbc8f',
-                tabBarInactiveTintColor: '#8fbc8f', // adjust if needed
                 tabBarLabelStyle: {
                     fontSize: 12,
                 },
